@@ -70,4 +70,41 @@ async def websocket_state(websocket: WebSocket, user: str = Depends(get_ws_curre
     finally:
         simulator_instance.unsubscribe(push_to_queue)
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+# Serve Next.js frontend
+frontend_out = Path(__file__).parent.parent.parent / "frontend" / "out"
+
+if frontend_out.exists():
+    # Mount Next.js static assets
+    if (frontend_out / "_next").exists():
+        app.mount("/_next", StaticFiles(directory=str(frontend_out / "_next")), name="next_assets")
+    
+    # Catch-all for Next.js routes
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # Prevent accessing files outside frontend_out
+        if ".." in full_path:
+            return FileResponse(frontend_out / "index.html")
+            
+        # If empty path, serve index.html
+        if not full_path:
+            return FileResponse(frontend_out / "index.html")
+            
+        # 1. Check if exact file exists (e.g., /favicon.ico)
+        if (frontend_out / full_path).exists() and (frontend_out / full_path).is_file():
+            return FileResponse(frontend_out / full_path)
+            
+        # 2. Check if an exact HTML file exists (e.g., /login -> /login.html)
+        if (frontend_out / f"{full_path}.html").exists():
+            return FileResponse(frontend_out / f"{full_path}.html")
+            
+        # 3. Check if a directory with index.html exists (e.g., /dashboard -> /dashboard/index.html)
+        if (frontend_out / full_path / "index.html").exists():
+            return FileResponse(frontend_out / full_path / "index.html")
+            
+        # 4. Fallback to index.html for client-side routing
+        return FileResponse(frontend_out / "index.html")
 
